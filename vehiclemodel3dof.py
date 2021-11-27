@@ -23,17 +23,34 @@ class VehicleDynamicModel3dof():
             config = configparser.ConfigParser()
             config.read(params)
             body = config["body"]
-            self.wheel_base = body.getfloat("wheelbase", self.wheel_base)
-            self.mass = body.getfloat("mass", self.mass)
-            self.steering_ratio = body.getfloat("steeringratio", self.steering_ratio)
-            self.wheel_angle_max = body.getfloat("maxwheelangle", self.wheel_angle_max)
+            powertrain = config["powertrain"]
+            self.wheel_base = body.getfloat("wheelbase", 2.5)
+            self.mass = body.getfloat("mass", 1390)
+            self.steering_ratio = body.getfloat("steeringratio", 14)
+            self.wheel_angle_max = body.getfloat("maxwheelangle", 0.523)
 
+            self.gear_ratios = self._parse_gear_ratios(powertrain, 0)
+            self.final_drive_ratio = powertrain.getfloat("finaldrive", 3)
+            self.driveline_efficiency = powertrain.getfloat("drivelineefficiency", 0.9)
         
 
         self.x = 0
         self.y = 0
         self.theta = 0
         self.wheel_angle = 0
+
+    
+    def _parse_gear_ratios(self, params: dict, default: float) -> dict:
+        """Parses gear ratios from configuration."""
+
+        ratios = dict()
+        for i in range(-1, 10):
+            gear_name = "gear" + str(i)
+            if gear_name in params:
+                ratios[str(i)] = params.getfloat(gear_name, default)
+
+        return ratios
+
 
     def set_position(self, x, y, theta, wheel_angle) -> None:
 
@@ -62,6 +79,10 @@ class VehicleDynamicModel3dof():
 
         return self.x, self.y, self.theta
 
+
+    def traction_force(self, engine_torque, gear: str, ):
+
+        traction_force = engine_torque * self.gear_ratios[gear] * self.driveline_efficiency
 
 
 def main():
