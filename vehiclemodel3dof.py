@@ -12,28 +12,39 @@ class VehicleDynamicModel3dof():
 
     def __init__(self, params=None) -> None:
 
-        
+        config = configparser.ConfigParser()
 
-        if params is not None:
-            logging.info("Loading {} parameters file.".format(params))
-            
-            config = configparser.ConfigParser()
+        if params is None:
+            logging.warning("No parameter file. Using default values.")
+        else:
             config.read(params)
-            body = config["body"]
-            powertrain = config["powertrain"]
-            self.wheel_base = body.getfloat("wheelbase", 2.5)
-            self.vehicle_mass = body.getfloat("mass", 1390)
-            self.steering_ratio = body.getfloat("steeringratio", 14)
-            self.wheel_angle_max = body.getfloat("maxwheelangle", 0.523)
+        
+        # Vehicle parameters
+        self.wheel_base = config.getfloat("vehicle", "wheelbase", fallback=2.5)
+        self.vehicle_mass = config.getfloat("vehicle", "mass", fallback=1390)
+        self.vehicle_front_area = config.getfloat("vehicle", "frontArea", fallback=2.4)
+        self.drag_coef = config.getfloat("vehicle", "dragCoeficient", fallback=0.3)
 
-            self.gear_ratios = self._parse_gear_ratios(powertrain, 0)
-            self.final_drive_ratio = powertrain.getfloat("finaldrive", 3)
-            self.driveline_efficiency = powertrain.getfloat(
-                "drivelineefficiency", 0.9)
-            self.wheel_radius = powertrain.getfloat("wheelradius", 0.33)
-            self.air_density = config["environment"].getfloat("airdensity", 1.225)
-            self.drag_coef = config["body"].getfloat("dragcoef", 0.3)
-            self.vehicle_front_area = config["body"].getfloat("frontarea", 2.1)
+        # Engine parameters
+
+
+
+        # Steering parameters
+        self.steering_ratio = config.getfloat("steering", "steeringRatio", fallback=14)
+        self.wheel_angle_max = config.getfloat("steering", "maxWheelAngle", fallback=32)
+
+        # Transmission parameters
+        self.gears_number = config.getfloat("transmission", "gears", fallback=6)
+        
+        self.final_drive_ratio = config.getfloat("transmission", "finalDriveRatio", fallback=3)
+        self.driveline_efficiency = config.getfloat("transmission", "driveLineEfficiency", fallback=0.9)
+
+        # Tire parameters
+        self.wheel_radius = config.getfloat("tire", "wheelRadius", fallback=0.9)
+
+        # Environment parameters
+        self.air_density = config.getfloat("environment", "airDensity", fallback=1.225)
+        
 
 
         self.x = 0
