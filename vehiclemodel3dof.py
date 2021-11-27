@@ -12,29 +12,44 @@ class VehicleDynamicModel3dof():
 
     def __init__(self, params=None) -> None:
 
-        
+        config = configparser.ConfigParser()
 
-        if params is not None:
-            logging.info("Loading {} parameters file.".format(params))
-            
-            config = configparser.ConfigParser()
+        if params is None:
+            logging.warning("No parameter file. Using default values.")
+        else:
             config.read(params)
-            body = config["body"]
-            powertrain = config["powertrain"]
-            self.wheel_base = body.getfloat("wheelbase", 2.5)
-            self.vehicle_mass = body.getfloat("mass", 1390)
-            self.steering_ratio = body.getfloat("steeringratio", 14)
-            self.wheel_angle_max = body.getfloat("maxwheelangle", 0.523)
+        
+        # Vehicle parameters
+        self.wheel_base = config.getfloat("vehicle", "wheelbase", fallback=2.5)
+        self.vehicle_mass = config.getfloat("vehicle", "mass", fallback=1390)
+        self.vehicle_front_area = config.getfloat("vehicle", "frontArea", fallback=2.4)
+        self.drag_coef = config.getfloat("vehicle", "dragCoeficient", fallback=0.3)
 
-            self.gear_ratios = self._parse_gear_ratios(powertrain, 0)
-            self.final_drive_ratio = powertrain.getfloat("finaldrive", 3)
-            self.driveline_efficiency = powertrain.getfloat(
-                "drivelineefficiency", 0.9)
-            self.wheel_radius = powertrain.getfloat("wheelradius", 0.33)
-            self.air_density = config["environment"].getfloat("airdensity", 1.225)
-            self.drag_coef = config["body"].getfloat("dragcoef", 0.3)
-            self.vehicle_front_area = config["body"].getfloat("frontarea", 2.1)
+        # Engine parameters
+        self.engine_speed_min = config.getfloat("engine", "engineSpeedMin", fallback=900)
+        self.engine_speed_max = config.getfloat("engine", "engineSpeedMax", fallback=6000)
+        self.max_torque_speed = config.getfloat("engine", "maxTorqueEngineSpeed", fallback=3500)
+        self.max_power_speed = config.getfloat("engine", "maxPowerEngineSpeed", fallback=6000)
+        self.torque = list(map(float, config.get("engine", "torqueAxis", fallback="306 385 439 450 450 367").split()))
+        self.torque_speed = list(map(float, config.get("engine", "engineSpeedAxis", fallback="900 2020 2990 3500 5000 6500").split()))
 
+        # Steering parameters
+        self.steering_ratio = config.getfloat("steering", "steeringRatio", fallback=14)
+        self.wheel_angle_max = config.getfloat("steering", "maxWheelAngle", fallback=32)
+
+        # Transmission parameters
+        self.gears_number = config.getfloat("transmission", "gears", fallback=6)
+        self.gear_ratios = list(map(float, config.get("transmission", "gearRatios", fallback="4.71 3.14 2.11 1.67 1.29 1.00").split()))
+        self.final_drive_ratio = config.getfloat("transmission", "finalDriveRatio", fallback=3)
+        self.driveline_efficiency = config.getfloat("transmission", "driveLineEfficiency", fallback=0.9)
+
+        # Tire parameters
+        self.wheel_radius = config.getfloat("tire", "wheelRadius", fallback=0.9)
+        self.dynamic_wheel_radius = self.wheel_radius * 0.98
+
+        # Environment parameters
+        self.air_density = config.getfloat("environment", "airDensity", fallback=1.225)
+        self.road_load_coef = config.getfloat("environment", "roadLoadCoeficient", fallback=1.225)
 
         self.x = 0
         self.y = 0
@@ -48,16 +63,6 @@ class VehicleDynamicModel3dof():
     def vehicle_speed_kmph(self):
         return self.vehicle_speed * 3.6
 
-    def _parse_gear_ratios(self, params: dict, default: float) -> dict:
-        """Parses gear ratios from configuration."""
-
-        ratios = dict()
-        for i in range(-1, 10):
-            gear_name = "gear" + str(i)
-            if gear_name in params:
-                ratios[str(i)] = params.getfloat(gear_name, default)
-
-        return ratios
 
     def set_position(self, x, y, theta, wheel_angle) -> None:
 
@@ -66,8 +71,6 @@ class VehicleDynamicModel3dof():
         self.theta = theta
         self.wheel_angle = wheel_angle
         self.vehicle_speed = 0
-
-
     
 
     def steering(self, speed, wheel_angle_speed, dt):
@@ -97,16 +100,13 @@ class VehicleDynamicModel3dof():
 
     def update(self, dt):
 
-        dynamic_wheel_radius = self.wheel_radius * 0.98
         traction_force = self.engine_torque * \
             self.gear_ratios[self.selected_gear] * self.final_drive_ratio * \
-            self.driveline_efficiency / dynamic_wheel_radius
+            self.driveline_efficiency / self.dynamic_wheel_radius
 
         road_slope_force = self.vehicle_mass * 9.81 * math.sin(self.slope)
-        road_load_force = self.vehicle_mass * 9.81 * 0.01 * math.cos(self.slope)
+        road_load_force = self.vehicle_mass * 9.81 * self.road_load_coef * math.cos(self.slope)
         aero_drag_force = 0.5 * self.air_density * self.drag_coef * self.vehicle_front_area * self.vehicle_speed * self.vehicle_speed
-
-
 
         self.vehicle_acceleration = (traction_force - road_slope_force - road_load_force - aero_drag_force) / self.vehicle_mass
 
