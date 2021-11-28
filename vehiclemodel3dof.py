@@ -107,20 +107,27 @@ class VehicleDynamicModel3dof():
         return speed, torque
 
 
-    def transmission(self):
+    def transmission(self, engine_torque: float, transmission_speed: float) -> tuple[float, float]:
 
-        pass
+        gear_ratio = self.gear_ratios(self.shifter())
+        transmission_torque = engine_torque * self.driveline_efficiency * gear_ratio * self.final_drive_ratio
 
-    def shifter(self):
+        engine_speed = gear_ratio * transmission_speed * 30 / math.pi * self.final_drive_ratio
 
+        return transmission_torque, engine_speed
+
+    def shifter(self, engine_speed: float) -> int:
+
+        selected_gear = None
         # Upshift
-        if self.engine_speed > self.max_power_speed and self.selected_gear < self.gears_number:
-            self.selected_gear += 1
+        if engine_speed > self.max_power_speed and self.selected_gear < self.gears_number:
+            selected_gear += 1
         # Downshift
-        elif self.engine_speed < self.max_torque_speed and self.selected_gear > 1:
-            self.selected_gear -= 1
-        
-
+        elif engine_speed < self.max_torque_speed and self.selected_gear > 1:
+            selected_gear -= 1
+        else:
+            selected_gear = self.selected_gear
+        return selected_gear
 
 
     def update(self, dt):
