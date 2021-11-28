@@ -150,6 +150,8 @@ def main():
         v.append(vehicle.vehicle_speed_kmph)
 
     plt.plot(t, v)
+    plt.xlabel("Time [s]")
+    plt.ylabel("Speed [km/h]")
     plt.show()
 
     x = list()
