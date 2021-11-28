@@ -30,8 +30,9 @@ class VehicleDynamicModel3dof():
         self.engine_speed_max = config.getfloat("engine", "engineSpeedMax", fallback=6000)
         self.max_torque_speed = config.getfloat("engine", "maxTorqueEngineSpeed", fallback=3500)
         self.max_power_speed = config.getfloat("engine", "maxPowerEngineSpeed", fallback=6000)
-        self.torque = list(map(float, config.get("engine", "torqueAxis", fallback="306 385 439 450 450 367").split()))
+        self.torque_chart = list(map(float, config.get("engine", "torqueAxis", fallback="306 385 439 450 450 367").split()))
         self.torque_speed = list(map(float, config.get("engine", "engineSpeedAxis", fallback="900 2020 2990 3500 5000 6500").split()))
+        self.power_chart = np.multiply(self.torque_chart, self.torque_speed) * np.pi / 30
 
         # Steering parameters
         self.steering_ratio = config.getfloat("steering", "steeringRatio", fallback=14)
@@ -56,7 +57,7 @@ class VehicleDynamicModel3dof():
         self.theta = 0
         self.wheel_angle = 0
         self.vehicle_speed = 0
-
+        self.engine_speed = 1000
         self.slope = 0
 
     @property
@@ -98,7 +99,16 @@ class VehicleDynamicModel3dof():
         self.engine_torque = engine_torque
         self.selected_gear = gear
 
+
+    def engine(self, engine_speed: float) -> tuple[float, float]:
+
+        speed = np.clip(engine_speed, self.engine_speed_min, self.engine_speed_max)
+        torque = np.interp(speed, self.torque_speed, self.torque_chart)
+        return speed, torque
+
     def update(self, dt):
+
+        self.engine_torque = self.engine(self.engine_speed)[1]
 
         traction_force = self.engine_torque * \
             self.gear_ratios[self.selected_gear] * self.final_drive_ratio * \
@@ -112,13 +122,25 @@ class VehicleDynamicModel3dof():
 
         self.vehicle_speed = self.vehicle_speed + self.vehicle_acceleration * dt
 
+def show_torque(vehicle: VehicleDynamicModel3dof):
 
+    plt.subplot(1,2,1)
+    plt.plot(vehicle.torque_speed, vehicle.torque_chart)
+    plt.xlabel("Engine speed")
+    plt.ylabel("Torque")
+
+    plt.subplot(1,2,2)
+    plt.plot(vehicle.torque_speed, vehicle.power_chart)
+    plt.xlabel("Engine speed")
+    plt.ylabel("Power")
+    plt.show()
 
 def main():
 
     vehicle = VehicleDynamicModel3dof("mazda.ini")
-    vehicle.driving_input(100, "6")
+    vehicle.driving_input(100, 3)
 
+    show_torque(vehicle)
 
     t = np.linspace(0,100, 1001)
     v = list()
