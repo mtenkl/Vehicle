@@ -106,6 +106,23 @@ class VehicleDynamicModel3dof():
         torque = np.interp(speed, self.torque_speed, self.torque_chart)
         return speed, torque
 
+
+    def transmission(self):
+
+        pass
+
+    def shifter(self):
+
+        # Upshift
+        if self.engine_speed > self.max_power_speed and self.selected_gear < self.gears_number:
+            self.selected_gear += 1
+        # Downshift
+        elif self.engine_speed < self.max_torque_speed and self.selected_gear > 1:
+            self.selected_gear -= 1
+        
+
+
+
     def update(self, dt):
 
         self.engine_torque = self.engine(self.engine_speed)[1]
