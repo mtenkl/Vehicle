@@ -106,6 +106,30 @@ class VehicleDynamicModel3dof():
         torque = np.interp(speed, self.torque_speed, self.torque_chart)
         return speed, torque
 
+
+    def transmission(self, engine_torque: float, transmission_speed: float) -> tuple[float, float]:
+
+        gear_ratio = self.gear_ratios(self.shifter())
+        transmission_torque = engine_torque * self.driveline_efficiency * gear_ratio * self.final_drive_ratio
+
+        engine_speed = gear_ratio * transmission_speed * 30 / math.pi * self.final_drive_ratio
+
+        return transmission_torque, engine_speed
+
+    def shifter(self, engine_speed: float) -> int:
+
+        selected_gear = None
+        # Upshift
+        if engine_speed > self.max_power_speed and self.selected_gear < self.gears_number:
+            selected_gear += 1
+        # Downshift
+        elif engine_speed < self.max_torque_speed and self.selected_gear > 1:
+            selected_gear -= 1
+        else:
+            selected_gear = self.selected_gear
+        return selected_gear
+
+
     def update(self, dt):
 
         self.engine_torque = self.engine(self.engine_speed)[1]
@@ -150,6 +174,8 @@ def main():
         v.append(vehicle.vehicle_speed_kmph)
 
     plt.plot(t, v)
+    plt.xlabel("Time [s]")
+    plt.ylabel("Speed [km/h]")
     plt.show()
 
     x = list()
