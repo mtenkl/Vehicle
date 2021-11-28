@@ -10,7 +10,9 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
 
 class VehicleDynamicModel3dof():
 
-    def __init__(self, params=None) -> None:
+    def __init__(self, params=None, dt=0.01) -> None:
+
+        self.simulation_step = dt
 
         config = configparser.ConfigParser()
 
@@ -51,6 +53,8 @@ class VehicleDynamicModel3dof():
         # Environment parameters
         self.air_density = config.getfloat("environment", "airDensity", fallback=1.225)
         self.road_load_coef = config.getfloat("environment", "roadLoadCoeficient", fallback=1.225)
+        self.gravity_acceleration = config.getfloat("environment", "gravityAcceleration", fallback=9.81)
+
 
         self.x = 0
         self.y = 0
@@ -129,8 +133,22 @@ class VehicleDynamicModel3dof():
             selected_gear = self.selected_gear
         return selected_gear
 
+    def vehicle(self, wheel_torque: float) -> float:
 
-    def update(self, dt):
+        traction_force = wheel_torque / self.wheel_radius
+
+        slope_force = self.vehicle_mass * self.gravity_acceleration * math.sin(self.slope)
+        rolling_force = self.vehicle_mass * self.gravity_acceleration * self.road_load_coef * math.cos(self.slope)
+        drag_force = 0.5 * self.air_density * self.drag_coef * self.vehicle_front_area * self.vehicle_speed * self.vehicle_speed
+
+        total_force = traction_force - (slope_force + rolling_force + drag_force)
+        vehicle_acceleration = total_force / self.vehicle_mass
+        self.vehicle_speed = self.vehicle_speed + vehicle_acceleration * self.simulation_step
+
+        wheel_speed = self.vehicle_speed / self.wheel_radius
+        return wheel_speed
+
+    def update(self):
 
         self.engine_torque = self.engine(self.engine_speed)[1]
 
@@ -144,7 +162,7 @@ class VehicleDynamicModel3dof():
 
         self.vehicle_acceleration = (traction_force - road_slope_force - road_load_force - aero_drag_force) / self.vehicle_mass
 
-        self.vehicle_speed = self.vehicle_speed + self.vehicle_acceleration * dt
+        self.vehicle_speed = self.vehicle_speed + self.vehicle_acceleration * self.simulation_step
 
 def show_torque(vehicle: VehicleDynamicModel3dof):
 
@@ -170,7 +188,7 @@ def main():
     v = list()
 
     for tx in t:
-        vehicle.update(0.1)
+        vehicle.update()
         v.append(vehicle.vehicle_speed_kmph)
 
     plt.plot(t, v)
