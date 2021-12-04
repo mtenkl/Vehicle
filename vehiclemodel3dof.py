@@ -56,26 +56,88 @@ class VehicleDynamicModel3dof():
         self.gravity_acceleration = config.getfloat("environment", "gravityAcceleration", fallback=9.81)
 
 
+
         self.x = 0
         self.y = 0
-        self.theta = 0
-        self.wheel_angle = 0
-        self.vehicle_speed = 0
-        self.engine_speed = 1000
         self.slope = 0
 
+        # Vehicle variables
+        self._vehicle_speed = 0
+        self._vehicle_acceleration = 0
+        self._wheel_speed = 0
+
+        # Engine variables
+        self._engine_speed = 0
+        self._engine_torque = 0
+        self._throttle = 0
+
+        #Transmission variables
+        self._gear = 1
+
+        # Environment
+        self._drag_force = 0
+        self._rolling_force = 0
+        self._slope_force = 0
+
+        # Steering variables
+        self.theta = 0
+        self.wheel_angle = 0
+
+    @property
+    def throttle(self):
+        return self._throttle
+
+    @throttle.setter
+    def throttle(self, position_pct):
+        if position_pct < 0 or position_pct > 100:
+            raise ValueError()
+        else:
+            self._throttle = position_pct / 100.
+
+    @property
+    def gear(self):
+        return self._gear
+
+    @property
+    def vehicle_speed_mps(self):
+        return self._vehicle_speed
+        
     @property
     def vehicle_speed_kmph(self):
-        return self.vehicle_speed * 3.6
+        return self._vehicle_speed * 3.6
 
+    @property
+    def acceleration_mps2(self):
+        return self._vehicle_acceleration
 
-    def set_position(self, x, y, theta, wheel_angle) -> None:
+    @property
+    def engine_torque_nm(self):
+        return self._engine_torque
+
+    @property
+    def engine_speed_rpm(self):
+        return self._engine_speed
+
+    # Environment
+    @property
+    def drag_force(self):
+        return self._drag_force
+
+    @property
+    def rolling_force(self):
+        return self._rolling_force
+
+    @property
+    def slope_force(self):
+        return self._slope_force
+
+    def set_position(self, x=0, y=0, theta=0, wheel_angle=0) -> None:
 
         self.x = x
         self.y = y
         self.theta = theta
         self.wheel_angle = wheel_angle
-        self.vehicle_speed = 0
+        self._vehicle_speed = 0
     
 
     def steering(self, speed, wheel_angle_speed, dt):
@@ -98,71 +160,67 @@ class VehicleDynamicModel3dof():
         return self.x, self.y, self.theta
 
 
-    def driving_input(self, engine_torque: float, gear: str) -> None:
-        """Driver`s inputs for vehicle model."""
-        self.engine_torque = engine_torque
-        self.selected_gear = gear
+    def _engine(self, speed: float) -> float:
+        """Model of the engine.
+        @speed: Engine speed
+        @return: Engine torque"""
+        self._engine_speed = np.clip(speed, self.engine_speed_min, self.engine_speed_max)
+        self._engine_torque = np.interp(self._engine_speed, self.torque_speed, self.torque_chart) * self._throttle
+        return self._engine_torque
 
 
-    def engine(self, engine_speed: float) -> tuple[float, float]:
-
-        speed = np.clip(engine_speed, self.engine_speed_min, self.engine_speed_max)
-        torque = np.interp(speed, self.torque_speed, self.torque_chart)
-        return speed, torque
-
-
-    def transmission(self, engine_torque: float, transmission_speed: float) -> tuple[float, float]:
-
-        gear_ratio = self.gear_ratios(self.shifter())
+    def _transmission(self, engine_torque: float, transmission_speed: float) -> tuple[float, float]:
+        """Transmission model
+        @engine_torque: Engine torque [Nm]
+        @transmission_speed: Transmission speed [rad/s]
+        return: tuple(transmission torque, engine speed [rpm])"""
+        gear_ratio = self.gear_ratios[self._shifter(self._engine_speed) - 1]
         transmission_torque = engine_torque * self.driveline_efficiency * gear_ratio * self.final_drive_ratio
 
         engine_speed = gear_ratio * transmission_speed * 30 / math.pi * self.final_drive_ratio
 
         return transmission_torque, engine_speed
 
-    def shifter(self, engine_speed: float) -> int:
-
-        selected_gear = None
+    def _shifter(self, engine_speed: float) -> int:
+        """Shifter model. Shifter shifts up when engine speed reaches maximum power and shifts down when engine speed
+        is bellow maximum torque speed.
+        @engine_speed: Engine speed
+        @return: Gear number
+        """
+        
         # Upshift
-        if engine_speed > self.max_power_speed and self.selected_gear < self.gears_number:
-            selected_gear += 1
+        if engine_speed >= self.max_power_speed and self._gear < self.gears_number:
+            self._gear += 1
         # Downshift
-        elif engine_speed < self.max_torque_speed and self.selected_gear > 1:
-            selected_gear -= 1
-        else:
-            selected_gear = self.selected_gear
-        return selected_gear
+        elif engine_speed <= self.max_torque_speed and self._gear > 1:
+            self._gear -= 1
 
-    def vehicle(self, wheel_torque: float) -> float:
+        return self._gear
 
+    def _vehicle(self, wheel_torque: float) -> float:
+        """Vehicle model
+        @wheel_torque: Torque on the wheels/transmission.
+        @return: wheel speed [rad/s]
+        """
         traction_force = wheel_torque / self.wheel_radius
 
-        slope_force = self.vehicle_mass * self.gravity_acceleration * math.sin(self.slope)
-        rolling_force = self.vehicle_mass * self.gravity_acceleration * self.road_load_coef * math.cos(self.slope)
-        drag_force = 0.5 * self.air_density * self.drag_coef * self.vehicle_front_area * self.vehicle_speed * self.vehicle_speed
+        self._slope_force = self.vehicle_mass * self.gravity_acceleration * math.sin(self.slope)
+        self._rolling_force = self.vehicle_mass * self.gravity_acceleration * self.road_load_coef * math.cos(self.slope)
+        self._drag_force = 0.5 * self.air_density * self.drag_coef * self.vehicle_front_area * self._vehicle_speed * self._vehicle_speed
 
-        total_force = traction_force - (slope_force + rolling_force + drag_force)
-        vehicle_acceleration = total_force / self.vehicle_mass
-        self.vehicle_speed = self.vehicle_speed + vehicle_acceleration * self.simulation_step
+        total_force = traction_force - (self._slope_force + self._rolling_force + self._drag_force)
+        self._vehicle_acceleration = total_force / self.vehicle_mass
+        self._vehicle_speed = self._vehicle_speed + self._vehicle_acceleration * self.simulation_step
 
-        wheel_speed = self.vehicle_speed / self.wheel_radius
+        wheel_speed = self._vehicle_speed / self.wheel_radius
         return wheel_speed
 
     def update(self):
 
-        self.engine_torque = self.engine(self.engine_speed)[1]
+        self.engine_torque = self._engine(self._engine_speed)
+        self.transmission_torque, self._engine_speed = self._transmission(self.engine_torque, self._wheel_speed)
+        self._wheel_speed = self._vehicle(self.transmission_torque)
 
-        traction_force = self.engine_torque * \
-            self.gear_ratios[self.selected_gear] * self.final_drive_ratio * \
-            self.driveline_efficiency / self.dynamic_wheel_radius
-
-        road_slope_force = self.vehicle_mass * 9.81 * math.sin(self.slope)
-        road_load_force = self.vehicle_mass * 9.81 * self.road_load_coef * math.cos(self.slope)
-        aero_drag_force = 0.5 * self.air_density * self.drag_coef * self.vehicle_front_area * self.vehicle_speed * self.vehicle_speed
-
-        self.vehicle_acceleration = (traction_force - road_slope_force - road_load_force - aero_drag_force) / self.vehicle_mass
-
-        self.vehicle_speed = self.vehicle_speed + self.vehicle_acceleration * self.simulation_step
 
 def show_torque(vehicle: VehicleDynamicModel3dof):
 
@@ -177,43 +235,79 @@ def show_torque(vehicle: VehicleDynamicModel3dof):
     plt.ylabel("Power")
     plt.show()
 
+def show_vehicle_data(t, telemetry):
+
+    plt.figure("Vehicle")
+
+    plt.subplot(3,3,1)
+    plt.title("Vehicle speed")
+    plt.plot(t, telemetry["vehicle_speed"])
+
+    plt.subplot(3,3,2)
+    plt.title("Engine speed")
+    plt.plot(t, telemetry["engine_speed"])
+
+    plt.subplot(3,3,3)
+    plt.title("Acceleration")
+    plt.plot(t, telemetry["acceleration"])
+
+    plt.subplot(3,3,4)
+    plt.title("Engine torque")
+    plt.plot(t, telemetry["engine_torque"])
+
+    plt.subplot(3,3,5)
+    plt.title("Gear")
+    plt.plot(t, telemetry["gear"])
+
+    plt.subplot(3,3,6)
+    plt.title("Drag")
+    plt.plot(t, telemetry["drag_force"])
+
+    plt.subplot(3,3,7)
+    plt.title("Rolling")
+    plt.plot(t, telemetry["rolling_force"])
+
+    plt.subplot(3,3,8)
+    plt.title("Slope")
+    plt.plot(t, telemetry["slope_force"])
+
+    plt.show()
+
 def main():
 
     vehicle = VehicleDynamicModel3dof("mazda.ini")
-    vehicle.driving_input(100, 3)
+    vehicle.throttle = 50
 
-    show_torque(vehicle)
+    # show_torque(vehicle)
 
-    t = np.linspace(0,100, 1001)
+    t = np.linspace(0,100, 10001)
     v = list()
-
-    for tx in t:
-        vehicle.update()
-        v.append(vehicle.vehicle_speed_kmph)
-
-    plt.plot(t, v)
-    plt.xlabel("Time [s]")
-    plt.ylabel("Speed [km/h]")
-    plt.show()
-
-    x = list()
-    y = list()
-
-    """
-    for t in range(0, 800):
-
-        wheel_angle_speed_deg = 1
-
-        _x, _y, theta = vehicle.steering(
-            2, wheel_angle_speed_deg/180*math.pi, 0.1)
-        x.append(_x)
-        y.append(_y)
+    telemetry = dict()
+    telemetry["vehicle_speed"] = list()
+    telemetry["engine_speed"] = list()
+    telemetry["acceleration"] = list()
+    telemetry["engine_torque"] = list()
+    telemetry["gear"] = list()
+    telemetry["drag_force"] = list()
+    telemetry["rolling_force"] = list()
+    telemetry["slope_force"] = list()
     
 
-    plt.plot(x, y)
-    plt.show()
+    for _ in t:
+        vehicle.update()
+        telemetry["vehicle_speed"].append(vehicle.vehicle_speed_kmph)
+        telemetry["engine_speed"].append(vehicle.engine_speed_rpm)
+        telemetry["acceleration"].append(vehicle.acceleration_mps2)
+        telemetry["engine_torque"].append(vehicle.engine_torque_nm)
+        telemetry["gear"].append(vehicle.gear)
 
-    """
+        telemetry["drag_force"].append(vehicle.drag_force)
+        telemetry["rolling_force"].append(vehicle.rolling_force)
+        telemetry["slope_force"].append(vehicle.slope_force)
+
+    show_vehicle_data(t, telemetry)
+
+ 
 
 
 
