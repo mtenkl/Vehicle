@@ -10,9 +10,9 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
 
 class VehicleDynamicModel3dof():
 
-    def __init__(self, params=None, dt=0.01) -> None:
+    def __init__(self, params=None) -> None:
 
-        self.simulation_step = dt
+        self.simulation_step = None
 
         config = configparser.ConfigParser()
 
@@ -88,7 +88,7 @@ class VehicleDynamicModel3dof():
 
     @property
     def throttle(self):
-        return self._throttle
+        return self._throttle * 100
 
     @throttle.setter
     def throttle(self, position_pct):
@@ -206,6 +206,8 @@ class VehicleDynamicModel3dof():
         @return: wheel speed [rad/s]
         """
         self._traction_force = wheel_torque / self.wheel_radius
+        traction_limit = self.vehicle_mass * self.gravity_acceleration * 1.1 * 0.5
+        self._traction_force = min(self._traction_force, traction_limit)
 
         self._slope_force = self.vehicle_mass * self.gravity_acceleration * math.sin(self.slope)
         if self._vehicle_speed > 0:
@@ -224,8 +226,9 @@ class VehicleDynamicModel3dof():
         wheel_speed = self._vehicle_speed / self.wheel_radius
         return wheel_speed
 
-    def update(self):
+    def update(self, dt):
 
+        self.simulation_step = dt
         self.engine_torque = self._engine(self._engine_speed)
         self.transmission_torque, self._engine_speed = self._transmission(self.engine_torque, self._wheel_speed)
         self._wheel_speed = self._vehicle(self.transmission_torque)
@@ -290,7 +293,7 @@ def main():
 
     vehicle = VehicleDynamicModel3dof("mazda.ini")
     vehicle.throttle = 50
-    t = np.linspace(0,100, 10001)
+    t = np.linspace(0,100, 1001)
     f = 0.01
     # show_torque(vehicle)
 
@@ -310,8 +313,8 @@ def main():
 
     for i in t:
         
-        vehicle.throttle = 100 * round(max(0, np.sin(2 * np.pi * f * i)))
-        vehicle.update()
+        vehicle.throttle = 100# * round(max(0, np.sin(2 * np.pi * f * i)))
+        vehicle.update(0.1)
         telemetry["vehicle_speed"].append(vehicle.vehicle_speed_kmph)
         telemetry["engine_speed"].append(vehicle.engine_speed_rpm)
         telemetry["acceleration"].append(vehicle.acceleration_mps2)
