@@ -66,6 +66,9 @@ class VehicleDynamicModel3dof():
         self._vehicle_acceleration = 0
         self._wheel_speed = 0
 
+        self._traction_force = 0
+        self._total_force = 0
+
         # Engine variables
         self._engine_speed = 0
         self._engine_torque = 0
@@ -202,14 +205,20 @@ class VehicleDynamicModel3dof():
         @wheel_torque: Torque on the wheels/transmission.
         @return: wheel speed [rad/s]
         """
-        traction_force = wheel_torque / self.wheel_radius
+        self._traction_force = wheel_torque / self.wheel_radius
 
         self._slope_force = self.vehicle_mass * self.gravity_acceleration * math.sin(self.slope)
-        self._rolling_force = self.vehicle_mass * self.gravity_acceleration * self.road_load_coef * math.cos(self.slope)
+        if self._vehicle_speed > 0:
+            self._rolling_force = self.vehicle_mass * self.gravity_acceleration * self.road_load_coef * math.cos(self.slope)
+        elif self._vehicle_speed == 0:
+            self._rolling_force = 0
+        else:
+            self._rolling_force = -1 * self.vehicle_mass * self.gravity_acceleration * self.road_load_coef * math.cos(self.slope)
+
         self._drag_force = 0.5 * self.air_density * self.drag_coef * self.vehicle_front_area * self._vehicle_speed * self._vehicle_speed
 
-        total_force = traction_force - (self._slope_force + self._rolling_force + self._drag_force)
-        self._vehicle_acceleration = total_force / self.vehicle_mass
+        self._total_force = self._traction_force - (self._slope_force + self._rolling_force + self._drag_force)
+        self._vehicle_acceleration = self._total_force / self.vehicle_mass
         self._vehicle_speed = self._vehicle_speed + self._vehicle_acceleration * self.simulation_step
 
         wheel_speed = self._vehicle_speed / self.wheel_radius
@@ -264,12 +273,16 @@ def show_vehicle_data(t, telemetry):
     plt.plot(t, telemetry["drag_force"])
 
     plt.subplot(3,3,7)
-    plt.title("Rolling")
-    plt.plot(t, telemetry["rolling_force"])
+    plt.title("Total force")
+    plt.plot(t, telemetry["total_force"])
 
     plt.subplot(3,3,8)
-    plt.title("Slope")
-    plt.plot(t, telemetry["slope_force"])
+    plt.title("Throttle")
+    plt.plot(t, telemetry["throttle"])
+
+    plt.subplot(3,3,9)
+    plt.title("Traction force")
+    plt.plot(t, telemetry["traction_force"])
 
     plt.show()
 
@@ -277,10 +290,11 @@ def main():
 
     vehicle = VehicleDynamicModel3dof("mazda.ini")
     vehicle.throttle = 50
-
+    t = np.linspace(0,100, 10001)
+    f = 0.01
     # show_torque(vehicle)
 
-    t = np.linspace(0,100, 10001)
+    
     v = list()
     telemetry = dict()
     telemetry["vehicle_speed"] = list()
@@ -289,11 +303,14 @@ def main():
     telemetry["engine_torque"] = list()
     telemetry["gear"] = list()
     telemetry["drag_force"] = list()
-    telemetry["rolling_force"] = list()
-    telemetry["slope_force"] = list()
+    telemetry["total_force"] = list()
+    telemetry["traction_force"] = list()
+    telemetry["throttle"] = list()
     
 
-    for _ in t:
+    for i in t:
+        
+        vehicle.throttle = 100 * round(max(0, np.sin(2 * np.pi * f * i)))
         vehicle.update()
         telemetry["vehicle_speed"].append(vehicle.vehicle_speed_kmph)
         telemetry["engine_speed"].append(vehicle.engine_speed_rpm)
@@ -302,8 +319,10 @@ def main():
         telemetry["gear"].append(vehicle.gear)
 
         telemetry["drag_force"].append(vehicle.drag_force)
-        telemetry["rolling_force"].append(vehicle.rolling_force)
-        telemetry["slope_force"].append(vehicle.slope_force)
+        telemetry["total_force"].append(vehicle._total_force)
+        telemetry["traction_force"].append(vehicle._traction_force)
+        telemetry["throttle"].append(vehicle.throttle)
+
 
     show_vehicle_data(t, telemetry)
 
