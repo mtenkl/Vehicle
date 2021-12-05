@@ -15,6 +15,7 @@ time = np.linspace(0, 100, 1001)
 speed = list()
 throttle = list()
 error = list()
+target_v = list()
 
 kp = 10
 ki = 1
@@ -26,6 +27,13 @@ for t in time:
         vehicle.throttle = 100
     else:
         vehicle.throttle = 0"""
+
+    if t > 20:
+        target_speed = 100
+    if t > 40:
+        target_speed = 50
+    if t > 60:
+        target_speed = 130
 
     e = target_speed - vehicle.vehicle_speed_kmph
 
@@ -40,10 +48,12 @@ for t in time:
     speed.append(vehicle.vehicle_speed_kmph)
     throttle.append(vehicle.throttle)
     error.append(e)
+    target_v.append(target_speed)
 
 
 plt.plot(time, speed)
 plt.plot(time, throttle)
-plt.plot(time, error)
+plt.plot(time, target_v)
+plt.legend()
 
 plt.show()
