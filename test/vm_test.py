@@ -5,10 +5,15 @@ sys.path.append('../VehicleDynamicModel')
 
 import vehiclemodel3dof
 
-
+vm = vehiclemodel3dof.VehicleDynamicModel3dof()
 
 def test_update():
 
-    vm = vehiclemodel3dof.VehicleDynamicModel3dof()
-    vm.update()
+    vm.update(0.1)
 
+
+def test_brake():
+
+
+    braking_torque = vm._brake_torque(2e6)
+    print(braking_torque)
