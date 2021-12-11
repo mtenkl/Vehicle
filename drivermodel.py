@@ -16,6 +16,8 @@ speed = list()
 throttle = list()
 error = list()
 target_v = list()
+traction = list()
+
 
 kp = 10
 ki = 1
@@ -47,13 +49,18 @@ for t in time:
     vehicle.update(0.1)
     speed.append(vehicle.vehicle_speed_kmph)
     throttle.append(vehicle.throttle)
+    traction.append(vehicle._traction_force)
     error.append(e)
     target_v.append(target_speed)
 
-
+plt.subplot(2, 3, 1)
 plt.plot(time, speed)
+plt.subplot(2, 3, 2)
 plt.plot(time, throttle)
+plt.subplot(2, 3, 3)
 plt.plot(time, target_v)
+plt.subplot(2, 3, 4)
+plt.plot(time, traction)
 plt.legend()
 
 plt.show()
