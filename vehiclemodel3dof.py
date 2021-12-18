@@ -26,7 +26,7 @@ class VehicleDynamicModel3dof():
         self.vehicle_mass = config.getfloat("vehicle", "mass", fallback=1390)
         self.vehicle_front_area = config.getfloat(
             "vehicle", "frontArea", fallback=2.4)
-        self.drag_coef = config.getfloat(
+        self.vehicle_drag_coef = config.getfloat(
             "vehicle", "dragCoeficient", fallback=0.3)
 
         # Engine parameters
@@ -34,52 +34,52 @@ class VehicleDynamicModel3dof():
             "engine", "engineSpeedMin", fallback=900)
         self.engine_speed_max = config.getfloat(
             "engine", "engineSpeedMax", fallback=6000)
-        self.max_torque_speed = config.getfloat(
+        self.engine_max_torque_speed = config.getfloat(
             "engine", "maxTorqueEngineSpeed", fallback=3500)
-        self.max_power_speed = config.getfloat(
+        self.engine_max_power_speed = config.getfloat(
             "engine", "maxPowerEngineSpeed", fallback=6000)
-        self.torque_chart = list(map(float, config.get(
+        self.engine_torque_curve = list(map(float, config.get(
             "engine", "torqueAxis", fallback="306 385 439 450 450 367").split()))
-        self.torque_speed = list(map(float, config.get(
+        self.engine_speed_curve = list(map(float, config.get(
             "engine", "engineSpeedAxis", fallback="900 2020 2990 3500 5000 6500").split()))
-        self.power_chart = np.multiply(
-            self.torque_chart, self.torque_speed) * np.pi / 30
-        self.engine_braking_torque_chart = list(map(float, config.get(
+        self.engine_power_curve = np.multiply(
+            self.engine_torque_curve, self.engine_speed_curve) * np.pi / 30
+        self.engine_braking_torque_curve = list(map(float, config.get(
             "engine", "brakingTorqueAxis", fallback="30 40 48 45 30 20").split()))
 
         # Steering parameters
         self.steering_ratio = config.getfloat(
             "steering", "steeringRatio", fallback=14)
-        self.wheel_angle_max = config.getfloat(
+        self.steering_wheel_angle_max = config.getfloat(
             "steering", "maxWheelAngle", fallback=32)
 
         # Transmission parameters
-        self.gears_number = config.getfloat(
+        self.transmission_gears_number = config.getfloat(
             "transmission", "gears", fallback=6)
-        self.gear_ratios = list(map(float, config.get(
+        self.transmission_gear_ratios = list(map(float, config.get(
             "transmission", "gearRatios", fallback="4.71 3.14 2.11 1.67 1.29 1.00").split()))
-        self.final_drive_ratio = config.getfloat(
+        self.transmission_final_drive_ratio = config.getfloat(
             "transmission", "finalDriveRatio", fallback=3)
-        self.driveline_efficiency = config.getfloat(
+        self.transmission_driveline_efficiency = config.getfloat(
             "transmission", "driveLineEfficiency", fallback=0.9)
 
         # Tire parameters
-        self.wheel_radius = config.getfloat(
+        self.tire_wheel_radius = config.getfloat(
             "tire", "wheelRadius", fallback=0.9)
-        self.dynamic_wheel_radius = self.wheel_radius * 0.98
+        self.tire_dynamic_wheel_radius = self.tire_wheel_radius * 0.98
 
         # Environment parameters
-        self.air_density = config.getfloat(
+        self.env_air_density = config.getfloat(
             "environment", "airDensity", fallback=1.225)
-        self.road_load_coef = config.getfloat(
+        self.env_road_load_coef = config.getfloat(
             "environment", "roadLoadCoeficient", fallback=1.225)
-        self.gravity_acceleration = config.getfloat(
+        self.env_gravity_acceleration = config.getfloat(
             "environment", "gravityAcceleration", fallback=9.81)
 
         # Brakes parameters
-        self.front_brakes_pads_count = config.getfloat(
+        self.brakes_front_pads_count = config.getfloat(
             "brakes", "frontPads", fallback=2)
-        self.rear_brakes_pads_count = config.getfloat(
+        self.brakes_rear_pads_count = config.getfloat(
             "brakes", "rearPads", fallback=2)
         self.brakes_static_friction = config.getfloat(
             "brakes", "staticFriction", fallback=0.92)
@@ -205,9 +205,9 @@ class VehicleDynamicModel3dof():
         self.wheel_angle = self.wheel_angle + wheel_angle_speed * dt
 
         if self.wheel_angle > 0:
-            self.wheel_angle = min(self.wheel_angle, self.wheel_angle_max)
+            self.wheel_angle = min(self.wheel_angle, self.steering_wheel_angle_max)
         else:
-            self.wheel_angle = max(self.wheel_angle, -self.wheel_angle_max)
+            self.wheel_angle = max(self.wheel_angle, -self.steering_wheel_angle_max)
 
         dx = speed * math.cos(self.theta)
         dy = speed * math.sin(self.theta)
@@ -227,21 +227,21 @@ class VehicleDynamicModel3dof():
         if self._wheel_speed != 0:
             braking_torque_front_dynamic = self.brakes_dynamic_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
-                self.front_brakes_pads_count / 4
+                self.brakes_front_pads_count / 4
 
             braking_torque_rear_dynamic = self.brakes_dynamic_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
-                self.rear_brakes_pads_count / 4
+                self.brakes_rear_pads_count / 4
             self._braking_torque = 2 * braking_torque_front_dynamic + 2 * braking_torque_rear_dynamic
             return self._braking_torque
         else:
             braking_torque_front_static = self.brakes_static_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
-                self.front_brakes_pads_count / 4
+                self.brakes_front_pads_count / 4
 
             braking_torque_rear_static = self.brakes_static_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
-                self.rear_brakes_pads_count / 4
+                self.brakes_rear_pads_count / 4
  
             self._braking_torque = 2 * braking_torque_front_static + 2 * braking_torque_rear_static
             return self._braking_torque
@@ -254,7 +254,7 @@ class VehicleDynamicModel3dof():
         """
         brake_pressure = np.interp(brake_position_pct, self.brake_position_pct_map, self.brake_position_pressure_map)
         brake_torque = self._brake_torque(brake_pressure)
-        self._braking_force = brake_torque / self.wheel_radius
+        self._braking_force = brake_torque / self.tire_wheel_radius
         return self._braking_force
 
 
@@ -269,10 +269,10 @@ class VehicleDynamicModel3dof():
 
         if self._throttle == 0:
             self._engine_torque = - np.interp(
-                self._engine_speed, self.torque_speed, self.engine_braking_torque_chart)
+                self._engine_speed, self.engine_speed_curve, self.engine_braking_torque_curve)
         else:
             self._engine_torque = np.interp(
-                self._engine_speed, self.torque_speed, self.torque_chart) * self._throttle
+                self._engine_speed, self.engine_speed_curve, self.engine_torque_curve) * self._throttle
         return self._engine_torque
 
     def _transmission(self, engine_torque: float, transmission_speed: float) -> tuple[float, float]:
@@ -280,12 +280,12 @@ class VehicleDynamicModel3dof():
         @engine_torque: Engine torque [Nm]
         @transmission_speed: Transmission speed [rad/s]
         return: tuple(transmission torque, engine speed [rpm])"""
-        gear_ratio = self.gear_ratios[self._shifter(self._engine_speed) - 1]
+        gear_ratio = self.transmission_gear_ratios[self._shifter(self._engine_speed) - 1]
         transmission_torque = engine_torque * \
-            self.driveline_efficiency * gear_ratio * self.final_drive_ratio
+            self.transmission_driveline_efficiency * gear_ratio * self.transmission_final_drive_ratio
 
         engine_speed = gear_ratio * transmission_speed * \
-            30 / math.pi * self.final_drive_ratio
+            30 / math.pi * self.transmission_final_drive_ratio
 
         return transmission_torque, engine_speed
 
@@ -297,10 +297,10 @@ class VehicleDynamicModel3dof():
         """
 
         # Upshift
-        if engine_speed >= self.max_power_speed and self._gear < self.gears_number:
+        if engine_speed >= self.engine_max_power_speed and self._gear < self.transmission_gears_number:
             self._gear += 1
         # Downshift
-        elif engine_speed <= self.max_torque_speed and self._gear > 1:
+        elif engine_speed <= self.engine_max_torque_speed and self._gear > 1:
             self._gear -= 1
 
         return self._gear
@@ -310,24 +310,24 @@ class VehicleDynamicModel3dof():
         @wheel_torque: Torque on the wheels/transmission.
         @return: wheel speed [rad/s]
         """
-        self._traction_force = wheel_torque / self.wheel_radius
+        self._traction_force = wheel_torque / self.tire_wheel_radius
 
         self._slope_force = self.vehicle_mass * \
-            self.gravity_acceleration * math.sin(self.slope)
+            self.env_gravity_acceleration * math.sin(self.slope)
         if self._vehicle_speed > 0:
-            self._rolling_force = self.vehicle_mass * self.gravity_acceleration * \
-                self.road_load_coef * math.cos(self.slope)
+            self._rolling_force = self.vehicle_mass * self.env_gravity_acceleration * \
+                self.env_road_load_coef * math.cos(self.slope)
         elif self._vehicle_speed == 0:
             self._rolling_force = 0
         else:
             self._rolling_force = -1 * self.vehicle_mass * \
-                self.gravity_acceleration * \
-                self.road_load_coef * math.cos(self.slope)
+                self.env_gravity_acceleration * \
+                self.env_road_load_coef * math.cos(self.slope)
 
-        self._drag_force = 0.5 * self.air_density * self.drag_coef * \
+        self._drag_force = 0.5 * self.env_air_density * self.vehicle_drag_coef * \
             self.vehicle_front_area * self._vehicle_speed * self._vehicle_speed
 
-        traction_limit = self.vehicle_mass * self.gravity_acceleration * 1.1 * 0.5
+        traction_limit = self.vehicle_mass * self.env_gravity_acceleration * 1.1 * 0.5
 
         self._total_force = self._traction_force - \
             (self._slope_force + self._rolling_force + self._drag_force + self._brake_force(self.brake))
@@ -337,7 +337,7 @@ class VehicleDynamicModel3dof():
         self._vehicle_speed = self._vehicle_speed + \
             self._vehicle_acceleration * self.simulation_step
 
-        wheel_speed = self._vehicle_speed / self.wheel_radius
+        wheel_speed = self._vehicle_speed / self.tire_wheel_radius
         return wheel_speed
 
     def update(self, dt):
@@ -352,12 +352,12 @@ class VehicleDynamicModel3dof():
 def show_torque(vehicle: VehicleDynamicModel3dof):
 
     plt.subplot(1, 2, 1)
-    plt.plot(vehicle.torque_speed, vehicle.torque_chart)
+    plt.plot(vehicle.engine_speed_curve, vehicle.engine_torque_curve)
     plt.xlabel("Engine speed")
     plt.ylabel("Torque")
 
     plt.subplot(1, 2, 2)
-    plt.plot(vehicle.torque_speed, vehicle.power_chart)
+    plt.plot(vehicle.engine_speed_curve, vehicle.engine_power_curve)
     plt.xlabel("Engine speed")
     plt.ylabel("Power")
     plt.show()
