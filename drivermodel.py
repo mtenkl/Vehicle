@@ -44,12 +44,16 @@ for t in time:
     der = kd * e / dt
 
     output = prop + integ + der
+    output = 100
+    if t > 20:
+        output = 0
+
     vehicle.throttle = np.clip(output, 0, 100)
 
     vehicle.update(0.1)
     speed.append(vehicle.vehicle_speed_kmph)
     throttle.append(vehicle.throttle)
-    traction.append(vehicle._traction_force)
+    traction.append(vehicle._total_force)
     error.append(e)
     target_v.append(target_speed)
 
