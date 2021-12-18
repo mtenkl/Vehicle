@@ -44,6 +44,8 @@ class VehicleDynamicModel3dof():
             "engine", "engineSpeedAxis", fallback="900 2020 2990 3500 5000 6500").split()))
         self.power_chart = np.multiply(
             self.torque_chart, self.torque_speed) * np.pi / 30
+        self.engine_braking_torque_chart = list(map(float, config.get(
+            "engine", "brakingTorqueAxis", fallback="30 40 48 45 30 20").split()))
 
         # Steering parameters
         self.steering_ratio = config.getfloat(
@@ -264,8 +266,13 @@ class VehicleDynamicModel3dof():
         """
         self._engine_speed = np.clip(
             speed, self.engine_speed_min, self.engine_speed_max)
-        self._engine_torque = np.interp(
-            self._engine_speed, self.torque_speed, self.torque_chart) * self._throttle
+
+        if self._throttle == 0:
+            self._engine_torque = - np.interp(
+                self._engine_speed, self.torque_speed, self.engine_braking_torque_chart)
+        else:
+            self._engine_torque = np.interp(
+                self._engine_speed, self.torque_speed, self.torque_chart) * self._throttle
         return self._engine_torque
 
     def _transmission(self, engine_torque: float, transmission_speed: float) -> tuple[float, float]:
@@ -304,9 +311,6 @@ class VehicleDynamicModel3dof():
         @return: wheel speed [rad/s]
         """
         self._traction_force = wheel_torque / self.wheel_radius
-        traction_limit = self.vehicle_mass * self.gravity_acceleration * 1.1 * 0.5
-        self._traction_force = min(self._traction_force, traction_limit)
-        self._traction_force = max(self._traction_force - self._brake_force(self.brake), 0)
 
         self._slope_force = self.vehicle_mass * \
             self.gravity_acceleration * math.sin(self.slope)
@@ -323,8 +327,12 @@ class VehicleDynamicModel3dof():
         self._drag_force = 0.5 * self.air_density * self.drag_coef * \
             self.vehicle_front_area * self._vehicle_speed * self._vehicle_speed
 
+        traction_limit = self.vehicle_mass * self.gravity_acceleration * 1.1 * 0.5
+
         self._total_force = self._traction_force - \
-            (self._slope_force + self._rolling_force + self._drag_force)
+            (self._slope_force + self._rolling_force + self._drag_force + self._brake_force(self.brake))
+        
+        
         self._vehicle_acceleration = self._total_force / self.vehicle_mass
         self._vehicle_speed = self._vehicle_speed + \
             self._vehicle_acceleration * self.simulation_step
