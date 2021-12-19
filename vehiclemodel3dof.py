@@ -1,6 +1,7 @@
 import configparser
 import argparse
 import math
+from matplotlib.transforms import Bbox
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
@@ -355,10 +356,19 @@ class VehicleDynamicModel3dof():
         plot_cols = math.ceil(plot_number / plot_rows)
         plot_pos = 1
 
+        self._vehicle_speed = 10
+        plt.figure("Vehicle telemetry")
+        plt.subplot(plot_rows, plot_cols, plot_pos)
+
+        plt.bar(["Vehicle speed"],self.vehicle_speed_kmph)
+        plt.show()
+
+
+
     def plot_vehicle_parameters(self, parameters_to_show:str) -> None:
 
         parameters_to_show = set(parameters_to_show)
-        plot_numbers = {"e": 4, "b": 1, "t":1, "o":1}
+        plot_numbers = {"e": 3, "b": 1, "t":1, "o":1}
 
         plot_number = sum(plot_numbers[key] for key in plot_numbers if key in parameters_to_show)
 
@@ -396,14 +406,6 @@ class VehicleDynamicModel3dof():
             plt.plot(self.engine_speed_curve, self.engine_braking_torque_curve)
             plot_pos += 1
 
-            plt.subplot(plot_rows, plot_cols, plot_pos)
-            plt.title("Engine parameters")
-            data = [["Engine",self.engine_speed_min],["Engmax",self.engine_speed_max],["Engine",self.engine_max_power_speed]]
-            plt.table(cellText=data, colLabels=['Parameter', 'Value'], 
-                    colColours=['#FFFFFF', '#F3CC32']) 
-            plt.axis('off')         
-            plot_pos += 1
-
         # Braking
         if "b" in parameters_to_show:
             plt.subplot(plot_rows, plot_cols, plot_pos)
@@ -419,15 +421,6 @@ class VehicleDynamicModel3dof():
             plt.xlabel("Gear index [-]")
             plt.ylabel("Gear ratio [-]")
             plt.bar(range(1,self.transmission_gears_number + 1), self.transmission_gear_ratios)
-            plot_pos += 1
-        # Other parameters
-        if "o" in parameters_to_show:
-            plt.subplot(plot_rows, plot_cols, plot_pos)
-            plt.title("Parameters")
-            data = [[1,2,3,4],[6,5,4,3],[1,3,5,1]]
-            plt.table(cellText=data, colLabels=['A', 'B', 'C', 'D'], loc='center', 
-                  cellLoc='center', colColours=['#FFFFFF', '#F3CC32', '#2769BD', '#DC3735'])   
-            plt.axis('off')         
             plot_pos += 1
 
         plt.tight_layout()
@@ -497,6 +490,7 @@ def main():
 
     vehicle = VehicleDynamicModel3dof("mazda.ini")
 
+    vehicle.plot_vehicle_telemetry("b")
     vehicle.plot_vehicle_parameters("ebto")
     vehicle.throttle = 50
     vehicle.brake = 80
@@ -531,6 +525,7 @@ def main():
         telemetry["traction_force"].append(vehicle._traction_force)
         telemetry["throttle"].append(vehicle.throttle)
 
+    
     show_vehicle_data(t, telemetry)
 
 
