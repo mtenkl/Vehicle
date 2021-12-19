@@ -53,7 +53,7 @@ for t in time:
     vehicle.update(0.1)
     speed.append(vehicle.vehicle_speed_kmph)
     throttle.append(vehicle.throttle)
-    traction.append(vehicle._total_force)
+    traction.append(vehicle._longitudinal_force)
     error.append(e)
     target_v.append(target_speed)
 

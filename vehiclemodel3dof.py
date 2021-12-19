@@ -1,4 +1,5 @@
 import configparser
+import argparse
 import math
 import numpy as np
 import matplotlib.pyplot as plt
@@ -54,7 +55,7 @@ class VehicleDynamicModel3dof():
             "steering", "maxWheelAngle", fallback=32)
 
         # Transmission parameters
-        self.transmission_gears_number = config.getfloat(
+        self.transmission_gears_number = config.getint(
             "transmission", "gears", fallback=6)
         self.transmission_gear_ratios = list(map(float, config.get(
             "transmission", "gearRatios", fallback="4.71 3.14 2.11 1.67 1.29 1.00").split()))
@@ -89,9 +90,9 @@ class VehicleDynamicModel3dof():
             "brake", "pistonDiameter", fallback=0.02)
         self.brake_pad_position_radius = config.getfloat(
             "brake", "padPositionRadius", fallback=0.15)
-        self.brake_position_pct_map = list(map(float, config.get(
+        self.brake_position_curve = list(map(float, config.get(
             "brake", "brakePositionPct", fallback="0 5 30 50 70 100").split()))
-        self.brake_position_pressure_map = list(map(float, config.get(
+        self.brake_pressure_position_curve = list(map(float, config.get(
             "brake", "brakePositionPressure", fallback="0 0 15e5 30e5 50e5 60e5").split()))
 
         self.x = 0
@@ -104,7 +105,7 @@ class VehicleDynamicModel3dof():
         self._wheel_speed = 0
 
         self._traction_force = 0
-        self._total_force = 0
+        self._longitudinal_force = 0
 
         # Engine variables
         self._engine_speed = 0
@@ -112,7 +113,7 @@ class VehicleDynamicModel3dof():
         self._throttle = 0
 
         # Transmission variables
-        self._gear = 1
+        self._selected_gear = 1
 
         # Environment
         self._drag_force = 0
@@ -126,7 +127,7 @@ class VehicleDynamicModel3dof():
         # Braking variables
         self._braking_torque = 0
         self._braking_force = 0
-        self._brake_position_pct = 0
+        self._brake_pedal = 0
 
     @property
     def throttle(self):
@@ -141,11 +142,11 @@ class VehicleDynamicModel3dof():
 
     @property
     def brake(self):
-        return self._brake_position_pct
+        return self._brake_pedal * 100
 
     @brake.setter
     def brake(self, position_pct):
-        self._brake_position_pct = position_pct
+        self._brake_pedal = position_pct / 100.0
 
     @property
     def braking_torque(self):
@@ -157,7 +158,7 @@ class VehicleDynamicModel3dof():
 
     @property
     def gear(self):
-        return self._gear
+        return self._selected_gear
 
     @property
     def vehicle_speed_mps(self):
@@ -218,22 +219,24 @@ class VehicleDynamicModel3dof():
         self.theta = self.theta + dtheta * dt
 
         return self.x, self.y, self.theta
+        
 
-    def _brake_torque(self, brake_pressure) -> float:
+    def _brake_model(self, brake_position) -> float:
         """
-        Brake model.
-        @Returns brakes torque
+        Calculates braking force from brake pedal position.
+        @brake_position:
+        @return: Braking force
         """
+        brake_pressure = np.interp(brake_position / 100.0 , self.brake_position_curve, self.brake_pressure_position_curve)
+
         if self._wheel_speed != 0:
             braking_torque_front_dynamic = self.brakes_dynamic_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
                 self.brakes_front_pads_count / 4
-
             braking_torque_rear_dynamic = self.brakes_dynamic_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
                 self.brakes_rear_pads_count / 4
             self._braking_torque = 2 * braking_torque_front_dynamic + 2 * braking_torque_rear_dynamic
-            return self._braking_torque
         else:
             braking_torque_front_static = self.brakes_static_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
@@ -242,23 +245,13 @@ class VehicleDynamicModel3dof():
             braking_torque_rear_static = self.brakes_static_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
                 self.brakes_rear_pads_count / 4
- 
             self._braking_torque = 2 * braking_torque_front_static + 2 * braking_torque_rear_static
-            return self._braking_torque
 
-    def _brake_force(self, brake_position_pct):
-        """
-        Calculates braking force from braking torque
-        @brake_position_pct:
-        @return: Braking force
-        """
-        brake_pressure = np.interp(brake_position_pct, self.brake_position_pct_map, self.brake_position_pressure_map)
-        brake_torque = self._brake_torque(brake_pressure)
-        self._braking_force = brake_torque / self.tire_wheel_radius
+        self._braking_force = self._braking_torque / self.tire_dynamic_wheel_radius
         return self._braking_force
 
 
-    def _engine(self, speed: float) -> float:
+    def _engine_model(self, speed: float) -> float:
         """
         Model of the engine.
         @speed: Engine speed
@@ -275,12 +268,13 @@ class VehicleDynamicModel3dof():
                 self._engine_speed, self.engine_speed_curve, self.engine_torque_curve) * self._throttle
         return self._engine_torque
 
-    def _transmission(self, engine_torque: float, transmission_speed: float) -> tuple[float, float]:
+
+    def _transmission_model(self, engine_torque: float, transmission_speed: float) -> tuple[float, float]:
         """Transmission model
         @engine_torque: Engine torque [Nm]
         @transmission_speed: Transmission speed [rad/s]
         return: tuple(transmission torque, engine speed [rpm])"""
-        gear_ratio = self.transmission_gear_ratios[self._shifter(self._engine_speed) - 1]
+        gear_ratio = self.transmission_gear_ratios[self._shifter_model(self._engine_speed) - 1]
         transmission_torque = engine_torque * \
             self.transmission_driveline_efficiency * gear_ratio * self.transmission_final_drive_ratio
 
@@ -289,7 +283,7 @@ class VehicleDynamicModel3dof():
 
         return transmission_torque, engine_speed
 
-    def _shifter(self, engine_speed: float) -> int:
+    def _shifter_model(self, engine_speed: float) -> int:
         """Shifter model. Shifter shifts up when engine speed reaches maximum power and shifts down when engine speed
         is bellow maximum torque speed.
         @engine_speed: Engine speed
@@ -297,15 +291,15 @@ class VehicleDynamicModel3dof():
         """
 
         # Upshift
-        if engine_speed >= self.engine_max_power_speed and self._gear < self.transmission_gears_number:
-            self._gear += 1
+        if engine_speed >= self.engine_max_power_speed and self._selected_gear < self.transmission_gears_number:
+            self._selected_gear += 1
         # Downshift
-        elif engine_speed <= self.engine_max_torque_speed and self._gear > 1:
-            self._gear -= 1
+        elif engine_speed <= self.engine_max_torque_speed and self._selected_gear > 1:
+            self._selected_gear -= 1
 
-        return self._gear
+        return self._selected_gear
 
-    def _vehicle(self, wheel_torque: float) -> float:
+    def _vehicle_model(self, wheel_torque: float) -> float:
         """Vehicle model
         @wheel_torque: Torque on the wheels/transmission.
         @return: wheel speed [rad/s]
@@ -329,11 +323,11 @@ class VehicleDynamicModel3dof():
 
         traction_limit = self.vehicle_mass * self.env_gravity_acceleration * 1.1 * 0.5
 
-        self._total_force = self._traction_force - \
-            (self._slope_force + self._rolling_force + self._drag_force + self._brake_force(self.brake))
+        self._longitudinal_force = self._traction_force - \
+            (self._slope_force + self._rolling_force + self._drag_force + self._brake_model(self.brake))
         
         
-        self._vehicle_acceleration = self._total_force / self.vehicle_mass
+        self._vehicle_acceleration = self._longitudinal_force / self.vehicle_mass
         self._vehicle_speed = self._vehicle_speed + \
             self._vehicle_acceleration * self.simulation_step
 
@@ -343,10 +337,103 @@ class VehicleDynamicModel3dof():
     def update(self, dt):
 
         self.simulation_step = dt
-        self.engine_torque = self._engine(self._engine_speed)
-        self.transmission_torque, self._engine_speed = self._transmission(
+        self.engine_torque = self._engine_model(self._engine_speed)
+        self.transmission_torque, self._engine_speed = self._transmission_model(
             self.engine_torque, self._wheel_speed)
-        self._wheel_speed = self._vehicle(self.transmission_torque)
+        self._wheel_speed = self._vehicle_model(self.transmission_torque)
+
+
+    def plot_vehicle_telemetry(self, parameters: str) -> None:
+
+        parameters = set(parameters)
+        plot_number = len(parameters)
+
+        if plot_number == 0:
+            return
+
+        plot_rows = math.floor(math.sqrt(plot_number))
+        plot_cols = math.ceil(plot_number / plot_rows)
+        plot_pos = 1
+
+    def plot_vehicle_parameters(self, parameters_to_show:str) -> None:
+
+        parameters_to_show = set(parameters_to_show)
+        plot_numbers = {"e": 4, "b": 1, "t":1, "o":1}
+
+        plot_number = sum(plot_numbers[key] for key in plot_numbers if key in parameters_to_show)
+
+        if plot_number == 0:
+            return
+
+        plot_rows = math.floor(math.sqrt(plot_number))
+        plot_cols = math.ceil(plot_number / plot_rows)
+        plot_pos = 1
+        
+        plt.figure("Vehicle parameters")
+        # Engine
+        if "e" in parameters_to_show:
+            plt.subplot(plot_rows, plot_cols, plot_pos)
+            plt.title("Engine power curve")
+            plt.xlabel("Engine speed [1/min]")
+            plt.ylabel("Engine power [kW]")
+            plt.plot(self.engine_speed_curve, self.engine_power_curve / 1e3)
+            plt.axvline(self.engine_max_power_speed, color="r", linestyle=":")
+            plt.axvspan(self.engine_speed_min, self.engine_speed_max, color="g", alpha=0.2)
+            plot_pos += 1
+
+            plt.subplot(plot_rows, plot_cols, plot_pos)
+            plt.title("Engine torque curve")
+            plt.xlabel("Engine speed [1/min]")
+            plt.ylabel("Engine torque [Nm]")
+            plt.plot(self.engine_speed_curve, self.engine_torque_curve)
+            plt.axvline(self.engine_max_torque_speed, color="r", ls=":")
+            plot_pos += 1
+
+            plt.subplot(plot_rows, plot_cols, plot_pos)
+            plt.title("Engine braking curve")
+            plt.xlabel("Engine speed [1/min]")
+            plt.ylabel("Engine braking torque [Nm]")
+            plt.plot(self.engine_speed_curve, self.engine_braking_torque_curve)
+            plot_pos += 1
+
+            plt.subplot(plot_rows, plot_cols, plot_pos)
+            plt.title("Engine parameters")
+            data = [["Engine",self.engine_speed_min],["Engmax",self.engine_speed_max],["Engine",self.engine_max_power_speed]]
+            plt.table(cellText=data, colLabels=['Parameter', 'Value'], 
+                    colColours=['#FFFFFF', '#F3CC32']) 
+            plt.axis('off')         
+            plot_pos += 1
+
+        # Braking
+        if "b" in parameters_to_show:
+            plt.subplot(plot_rows, plot_cols, plot_pos)
+            plt.title("Braking")
+            plt.xlabel("Brake pedal position [%]")
+            plt.ylabel("Brakes pressure [Pa]")
+            plt.plot(self.brake_position_curve, self.brake_pressure_position_curve)
+            plot_pos += 1
+        # Transmission
+        if "t" in parameters_to_show:
+            plt.subplot(plot_rows, plot_cols, plot_pos)
+            plt.title("Gear ratios")
+            plt.xlabel("Gear index [-]")
+            plt.ylabel("Gear ratio [-]")
+            plt.bar(range(1,self.transmission_gears_number + 1), self.transmission_gear_ratios)
+            plot_pos += 1
+        # Other parameters
+        if "o" in parameters_to_show:
+            plt.subplot(plot_rows, plot_cols, plot_pos)
+            plt.title("Parameters")
+            data = [[1,2,3,4],[6,5,4,3],[1,3,5,1]]
+            plt.table(cellText=data, colLabels=['A', 'B', 'C', 'D'], loc='center', 
+                  cellLoc='center', colColours=['#FFFFFF', '#F3CC32', '#2769BD', '#DC3735'])   
+            plt.axis('off')         
+            plot_pos += 1
+
+        plt.tight_layout()
+        plt.show()
+
+    
 
 
 def show_torque(vehicle: VehicleDynamicModel3dof):
@@ -409,6 +496,8 @@ def show_vehicle_data(t, telemetry):
 def main():
 
     vehicle = VehicleDynamicModel3dof("mazda.ini")
+
+    vehicle.plot_vehicle_parameters("ebto")
     vehicle.throttle = 50
     vehicle.brake = 80
     t = np.linspace(0, 100, 1001)
@@ -438,7 +527,7 @@ def main():
         telemetry["gear"].append(vehicle.gear)
 
         telemetry["drag_force"].append(vehicle.drag_force)
-        telemetry["total_force"].append(vehicle._total_force)
+        telemetry["total_force"].append(vehicle._longitudinal_force)
         telemetry["traction_force"].append(vehicle._traction_force)
         telemetry["throttle"].append(vehicle.throttle)
 
@@ -446,5 +535,11 @@ def main():
 
 
 if __name__ == "__main__":
+
+
+    parser = argparse.ArgumentParser(description='Vehicle model with 3DOF.')
+    parser.add_argument("--parameters")
+    parser.add_argument("--telemetry")
+    args = parser.parse_args()
 
     main()
