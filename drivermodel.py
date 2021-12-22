@@ -48,12 +48,12 @@ for t in time:
     if t > 20:
         output = 0
 
-    vehicle.throttle = np.clip(output, 0, 100)
+    vehicle.throttle_pedal = np.clip(output, 0, 100)
 
     vehicle.update(0.1)
     speed.append(vehicle.vehicle_speed_kmph)
-    throttle.append(vehicle.throttle)
-    traction.append(vehicle._total_force)
+    throttle.append(vehicle.throttle_pedal)
+    traction.append(vehicle._longitudinal_force)
     error.append(e)
     target_v.append(target_speed)
 
