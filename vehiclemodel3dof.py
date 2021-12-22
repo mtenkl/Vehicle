@@ -335,9 +335,13 @@ class VehicleDynamicModel3dof():
 
         traction_limit = self.vehicle_mass * self.env_gravity_acceleration * 1.1 * 0.5
 
-        if self._vehicle_speed >= 0:
+        if self._vehicle_speed >= 2:
             self._longitudinal_force = self._traction_force - self._slope_force - \
                 self._rolling_force - self._drag_force - self._braking_force
+        elif self._vehicle_speed >= 0:
+            self._longitudinal_force = self._traction_force - self._slope_force - \
+                self._rolling_force - self._drag_force - min(self._braking_force, self._traction_force - self._slope_force - \
+                self._rolling_force - self._drag_force)
         else:
             self._longitudinal_force = self._traction_force - self._slope_force + \
                 self._rolling_force + self._drag_force + self._braking_force
