@@ -239,7 +239,7 @@ class VehicleDynamicModel3dof():
         @return: Braking force
         """
         brake_pressure = np.interp(
-            brake_position * 100.0, self.brake_position_curve, self.brake_pressure_position_curve) * 3
+            brake_position * 100.0, self.brake_position_curve, self.brake_pressure_position_curve) * 2
 
         if self._wheel_speed != 0:
             braking_torque_front_dynamic = self.brakes_dynamic_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
@@ -319,24 +319,28 @@ class VehicleDynamicModel3dof():
         @return: wheel speed [rad/s]
         """
         self._traction_force = wheel_torque / self.tire_wheel_radius
-        self._braking_force = self._brake_model(self._brake_pedal) if self._vehicle_speed >= 0 else - self._brake_model(self._brake_pedal)
+        self._braking_force = self._brake_model(self._brake_pedal)
         self._slope_force = self.vehicle_mass * \
             self.env_gravity_acceleration * math.sin(self.slope)
 
-        if self._vehicle_speed != 0:
+        if abs(self._vehicle_speed > 0.1):
             self._rolling_force = self.vehicle_mass * self.env_gravity_acceleration * \
                 self.env_road_load_coef * math.cos(self.slope)
         else:
             self._rolling_force = 0
 
         self._drag_force = 0.5 * self.env_air_density * self.vehicle_drag_coef * \
-            self.vehicle_front_area * abs(self._vehicle_speed) * self._vehicle_speed
+            self.vehicle_front_area * \
+            abs(self._vehicle_speed) * self._vehicle_speed
 
         traction_limit = self.vehicle_mass * self.env_gravity_acceleration * 1.1 * 0.5
 
-        self._longitudinal_force = self._traction_force - \
-            (self._slope_force + self._rolling_force +
-             self._drag_force + self._braking_force)
+        if self._vehicle_speed >= 0:
+            self._longitudinal_force = self._traction_force - self._slope_force - \
+                self._rolling_force - self._drag_force - self._braking_force
+        else:
+            self._longitudinal_force = self._traction_force - self._slope_force + \
+                self._rolling_force + self._drag_force + self._braking_force
 
         self._vehicle_acceleration = self._longitudinal_force / self.vehicle_mass
         self._vehicle_speed = self._vehicle_speed + \
@@ -356,7 +360,7 @@ class VehicleDynamicModel3dof():
     def plot_vehicle_telemetry(self, parameters: str) -> None:
 
         parameters = set(parameters)
-        plot_number = 5 #len(parameters)
+        plot_number = 5  # len(parameters)
 
         if plot_number == 0:
             return
@@ -476,7 +480,7 @@ def main():
             pass
         if t > 60:
             vehicle.throttle_pedal = 0
-            vehicle.brake_pedal = 0
+            vehicle.brake_pedal = 100
         if t > 80:
             vehicle.brake_pedal = 100
 
@@ -535,19 +539,14 @@ def main():
 
     plt.subplot(plot_row, plot_col, 10)
     plt.title("Longitudinal force")
-    plt.plot(interval,longitudinal_force)
+    plt.plot(interval, longitudinal_force)
 
     plt.subplot(plot_row, plot_col, 11)
     plt.title("Traction force")
-    plt.plot(interval,traction_force)
+    plt.plot(interval, traction_force)
 
     plt.tight_layout()
     plt.show()
-
-
-
-
-
 
 
 if __name__ == "__main__":
