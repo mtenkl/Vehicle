@@ -1,7 +1,6 @@
 import configparser
 import argparse
 import math
-from matplotlib.transforms import Bbox
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
@@ -455,8 +454,7 @@ class VehicleDynamicModel3dof():
 
 def main():
 
-    vehicle = VehicleDynamicModel3dof("mazda.ini")
-
+    vehicle = VehicleDynamicModel3dof("vehicle/mazda.ini")
     interval = np.linspace(0, 100, 1001)
 
     vehicle_speed = list()

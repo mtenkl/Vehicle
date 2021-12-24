@@ -3,7 +3,7 @@ import pytest
 # setting path
 sys.path.append('../VehicleDynamicModel')
 
-import vehiclemodel3dof
+import vehiclemodel.vehiclemodel3dof as vehiclemodel3dof
 
 vm = vehiclemodel3dof.VehicleDynamicModel3dof()
 

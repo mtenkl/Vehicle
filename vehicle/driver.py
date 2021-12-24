@@ -1,7 +1,6 @@
 import numpy as np
-import vehiclemodel3dof
 import matplotlib.pyplot as plt
-
+from vehicle import vehicledynamics
 
 class DriverModel(object):
 
@@ -11,7 +10,7 @@ class DriverModel(object):
 
     def __init__(self, driver_type=NORMAL_DRIVER) -> None:
         super().__init__()
-        self._vehicle = vehiclemodel3dof.VehicleDynamicModel3dof("mazda.ini")
+        self._vehicle = vehicledynamics.VehicleDynamicModel3dof("vehicle/mazda.ini")
         self._speed_histeresis = 1
         self._dt = 0.1
         self._driver_type = driver_type
@@ -91,7 +90,7 @@ class DriverModel(object):
 
 
 
-if __name__ == "__main__":
+def main():
 
     driver = DriverModel()
 
@@ -108,3 +107,8 @@ if __name__ == "__main__":
     plt.legend(["Speed", "Throttle", "Brake", "Target speed"])
 
     plt.show()
+
+
+if __name__ == "__main__":
+
+    main()
