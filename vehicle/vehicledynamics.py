@@ -78,13 +78,13 @@ class VehicleDynamicModel3dof():
             "environment", "gravityAcceleration", fallback=9.81)
 
         # Brakes parameters
-        self.brakes_front_pads_count = config.getfloat(
+        self.brake_front_pads_count = config.getfloat(
             "brakes", "frontPads", fallback=2)
-        self.brakes_rear_pads_count = config.getfloat(
+        self.brake_rear_pads_count = config.getfloat(
             "brakes", "rearPads", fallback=2)
-        self.brakes_static_friction = config.getfloat(
+        self.brake_static_friction = config.getfloat(
             "brakes", "staticFriction", fallback=0.92)
-        self.brakes_dynamic_friction = config.getfloat(
+        self.brake_dynamic_friction = config.getfloat(
             "brakes", "dynamicFriction", fallback=0.9)
         self.brake_piston_diameter = config.getfloat(
             "brake", "pistonDiameter", fallback=0.02)
@@ -213,13 +213,8 @@ class VehicleDynamicModel3dof():
     def steering(self, speed, wheel_angle_speed, dt):
 
         self.wheel_angle = self.wheel_angle + wheel_angle_speed * dt
-
-        if self.wheel_angle > 0:
-            self.wheel_angle = min(
-                self.wheel_angle, self.steering_wheel_angle_max)
-        else:
-            self.wheel_angle = max(
-                self.wheel_angle, -self.steering_wheel_angle_max)
+        
+        self.wheel_angle = np.clip(self.wheel_angle, math.radians(-self.steering_wheel_angle_max), math.radians(self.steering_wheel_angle_max))
 
         dx = speed * math.cos(self.theta)
         dy = speed * math.sin(self.theta)
@@ -241,22 +236,22 @@ class VehicleDynamicModel3dof():
             brake_position * 100.0, self.brake_position_curve, self.brake_pressure_position_curve) * 2
 
         if self._wheel_speed != 0:
-            braking_torque_front_dynamic = self.brakes_dynamic_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
+            braking_torque_front_dynamic = self.brake_dynamic_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
-                self.brakes_front_pads_count / 4
-            braking_torque_rear_dynamic = self.brakes_dynamic_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
+                self.brake_front_pads_count / 4
+            braking_torque_rear_dynamic = self.brake_dynamic_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
-                self.brakes_rear_pads_count / 4
+                self.brake_rear_pads_count / 4
             self._braking_torque = 2 * braking_torque_front_dynamic + \
                 2 * braking_torque_rear_dynamic
         else:
-            braking_torque_front_static = self.brakes_static_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
+            braking_torque_front_static = self.brake_static_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
-                self.brakes_front_pads_count / 4
+                self.brake_front_pads_count / 4
 
-            braking_torque_rear_static = self.brakes_static_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
+            braking_torque_rear_static = self.brake_static_friction * brake_pressure * math.pi * self.brake_piston_diameter * \
                 self.brake_piston_diameter * self.brake_pad_position_radius * \
-                self.brakes_rear_pads_count / 4
+                self.brake_rear_pads_count / 4
             self._braking_torque = 2 * braking_torque_front_static + \
                 2 * braking_torque_rear_static
 
