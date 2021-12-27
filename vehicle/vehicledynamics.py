@@ -63,6 +63,7 @@ class VehicleDynamicModel3dof():
             "transmission", "finalDriveRatio", fallback=3)
         self.transmission_driveline_efficiency = config.getfloat(
             "transmission", "driveLineEfficiency", fallback=0.9)
+        self.transmission_mode = {"P": 0, "R": -1, "N": 0, "D": 1}
 
         # Tire parameters
         self.tire_wheel_radius = config.getfloat(
@@ -108,12 +109,15 @@ class VehicleDynamicModel3dof():
         self._longitudinal_force = 0
 
         # Engine variables
+        self._ignition_on = False
         self._engine_speed = 0
         self._engine_torque = 0
         self._throttle = 0
 
         # Transmission variables
         self._selected_gear = 1
+        self._drive_mode = "N"
+        self._drive_mode_ratio = 0
 
         # Environment
         self._drag_force = 0
@@ -156,6 +160,14 @@ class VehicleDynamicModel3dof():
             self._throttle = position_pct / 100.
 
     @property
+    def ignition_on(self):
+        return self._ignition_on
+
+    @ignition_on.setter
+    def ignition_on(self, value):
+        self._ignition_on = value
+
+    @property
     def engine_torque_nm(self):
         return self._engine_torque
 
@@ -189,6 +201,14 @@ class VehicleDynamicModel3dof():
     def gear(self):
         return self._selected_gear
 
+    @property
+    def drive_mode(self):
+        return self._drive_mode
+
+    @drive_mode.setter
+    def drive_mode(self, value):
+        self._drive_mode = value
+
     # Environment
     @property
     def drag_force(self):
@@ -203,7 +223,13 @@ class VehicleDynamicModel3dof():
         return self._slope_force
 
     def set_position(self, x=0, y=0, theta=0, wheel_angle=0) -> None:
-
+        """
+        Set postion of vehicle
+        @x: x coordinates [m]
+        @y: y coordinates [m]
+        @theta: orientaion of vehicle
+        @wheel_angle: orientation of front wheel relatie to vehicle axis
+        """
         self.x = x
         self.y = y
         self.theta = theta
@@ -213,8 +239,9 @@ class VehicleDynamicModel3dof():
     def steering(self, speed, wheel_angle_speed, dt):
 
         self.wheel_angle = self.wheel_angle + wheel_angle_speed * dt
-        
-        self.wheel_angle = np.clip(self.wheel_angle, math.radians(-self.steering_wheel_angle_max), math.radians(self.steering_wheel_angle_max))
+
+        self.wheel_angle = np.clip(self.wheel_angle, math.radians(
+            -self.steering_wheel_angle_max), math.radians(self.steering_wheel_angle_max))
 
         dx = speed * math.cos(self.theta)
         dy = speed * math.sin(self.theta)
@@ -225,6 +252,16 @@ class VehicleDynamicModel3dof():
         self.theta = self.theta + dtheta * dt
 
         return self.x, self.y, self.theta
+
+    def _gear_selector(self, gear: str):
+
+        self._drive_mode_ratio = self.transmission_mode[str.upper(gear)]
+
+    def _ignition_model(self):
+        if self._ignition_on:
+            self._engine_speed = self.engine_speed_min
+        else:
+            self._engine_speed = 0
 
     def _brake_model(self, brake_position) -> float:
         """
@@ -280,11 +317,12 @@ class VehicleDynamicModel3dof():
         @engine_torque: Engine torque [Nm]
         @transmission_speed: Transmission speed [rad/s]
         return: tuple(transmission torque, engine speed [rpm])"""
+        self._gear_selector(self._drive_mode)
         gear_ratio = self.transmission_gear_ratios[self._shifter_model(
             self._engine_speed) - 1]
         transmission_torque = engine_torque * \
             self.transmission_driveline_efficiency * \
-            gear_ratio * self.transmission_final_drive_ratio
+            gear_ratio * self.transmission_final_drive_ratio * self._drive_mode_ratio
 
         engine_speed = gear_ratio * transmission_speed * \
             30 / math.pi * self.transmission_final_drive_ratio
@@ -312,6 +350,8 @@ class VehicleDynamicModel3dof():
         @wheel_torque: Torque on the wheels/transmission.
         @return: wheel speed [rad/s]
         """
+
+        self._ignition_model()
         self._traction_force = wheel_torque / self.tire_wheel_radius
         self._braking_force = self._brake_model(self._brake_pedal)
         self._slope_force = self.vehicle_mass * \
@@ -334,8 +374,8 @@ class VehicleDynamicModel3dof():
                 self._rolling_force - self._drag_force - self._braking_force
         elif self._vehicle_speed >= 0:
             self._longitudinal_force = self._traction_force - self._slope_force - \
-                self._rolling_force - self._drag_force - min(self._braking_force, self._traction_force - self._slope_force - \
-                self._rolling_force - self._drag_force)
+                self._rolling_force - self._drag_force - min(self._braking_force, self._traction_force - self._slope_force -
+                                                             self._rolling_force - self._drag_force)
         else:
             self._longitudinal_force = self._traction_force - self._slope_force + \
                 self._rolling_force + self._drag_force + self._braking_force

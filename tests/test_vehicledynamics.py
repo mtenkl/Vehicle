@@ -10,8 +10,10 @@ vehicle = vehicledynamics.VehicleDynamicModel3dof("vehicle/mazda.ini")
 
 def test_steering():
 
+    vehicle = vehicledynamics.VehicleDynamicModel3dof("vehicle/mazda.ini")
+
     traj = np.zeros((100, 3))
-    steering_speed_rad = 30 /180 * math.pi
+    steering_speed_rad = -30 /180 * math.pi
     theta_x = 0 /180 * math.pi
     vehicle.set_position(theta=theta_x)
     vehicle_speed = 0.5
@@ -38,8 +40,53 @@ def test_steering():
     plt.subplot(2,2,4)
     plt.title("[x,y]")
     plt.plot(traj[:, 0], traj[:,1], "-")
-    plt.xlim([0, 5])
-    plt.ylim([0, 5])
 
     plt.tight_layout()
     plt.show()
+
+
+def test_accelerating():
+    vehicle = vehicledynamics.VehicleDynamicModel3dof("vehicle/mazda.ini")
+    vehicle.ignition_on = True
+    vehicle.drive_mode = "D"
+
+    vehicle.throttle_pedal = 40
+    vehicle.update(10)
+
+    assert vehicle.vehicle_speed_kmph > 100
+    assert vehicle.vehicle_speed_kmph < 150
+
+
+def test_braking():
+    vehicle = vehicledynamics.VehicleDynamicModel3dof("vehicle/mazda.ini")
+    vehicle.ignition_on = True
+    vehicle.drive_mode = "D"
+    vehicle.throttle_pedal = 40
+    vehicle.update(10)
+
+    assert vehicle.vehicle_speed_kmph > 100
+    assert vehicle.vehicle_speed_kmph < 150
+
+    vehicle.brake_pedal = 90
+    vehicle.throttle_pedal = 0
+    vehicle.update(2)
+    assert vehicle.vehicle_speed_kmph > 10
+    assert vehicle.vehicle_speed_kmph < 60
+
+
+def test_braking_to_full_stop():
+
+    vehicle = vehicledynamics.VehicleDynamicModel3dof("vehicle/mazda.ini")
+    vehicle.ignition_on = True
+    vehicle.drive_mode = "D"
+
+    vehicle.throttle_pedal = 0
+    vehicle.update(2)
+    assert vehicle.vehicle_speed_kmph > 5, "Speed should be above 5"
+    assert vehicle.vehicle_speed_kmph < 10
+
+    vehicle.brake_pedal = 90
+    vehicle.throttle_pedal = 0
+    vehicle.update(2)
+    assert vehicle.vehicle_speed_kmph > 10
+    assert vehicle.vehicle_speed_kmph < 60
