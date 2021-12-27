@@ -57,6 +57,16 @@ def test_accelerating():
     assert vehicle.vehicle_speed_kmph < 150
 
 
+def test_neutral_gear():
+    vehicle = vehicledynamics.VehicleDynamicModel3dof("vehicle/mazda.ini")
+    vehicle.ignition_on = True
+    vehicle.drive_mode = "N"
+
+    vehicle.throttle_pedal = 40
+    vehicle.update(10)
+
+    assert vehicle.vehicle_speed_kmph == 0
+
 def test_braking():
     vehicle = vehicledynamics.VehicleDynamicModel3dof("vehicle/mazda.ini")
     vehicle.ignition_on = True
@@ -88,5 +98,5 @@ def test_braking_to_full_stop():
     vehicle.brake_pedal = 90
     vehicle.throttle_pedal = 0
     vehicle.update(2)
-    assert vehicle.vehicle_speed_kmph > 10
-    assert vehicle.vehicle_speed_kmph < 60
+    assert vehicle.vehicle_speed_kmph > 0
+    assert vehicle.vehicle_speed_kmph < 10
