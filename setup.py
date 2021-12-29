@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
    name='vehicle',
-   version='1.2',
+   version='1.3',
    description='A useful module',
    author='Michal Tenkl',
    author_email='',

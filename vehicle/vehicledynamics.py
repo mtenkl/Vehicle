@@ -362,6 +362,8 @@ class VehicleDynamicModel3dof():
         @engine_speed: Engine speed
         @return: Gear number
         """
+        if self.drive_mode.upper() == "D" and self._selected_gear == 0:
+            self._selected_gear = 1
         # Upshift
         if engine_speed >= self.ENGINE_MAX_POWER_SPEED and self._selected_gear < self.TRANSMISSION_GEARS_NUMBER:
             return self._selected_gear + 1
