@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import logging
 import sys
+from scipy import interpolate
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(message)s')
 
@@ -49,6 +50,8 @@ class VehicleDynamicModel3dof():
             self.ENGINE_TORQUE_CURVE, self.ENGINE_SPEED_CURVE) * np.pi / 30
         self.ENGINE_BRAKING_TORQUE_CURVE = list(map(float, config.get(
             "engine", "brakingTorqueAxis", fallback="30 40 48 45 30 20").split()))
+        engine_map_file_name = config.get("engine", "engineMap").strip("\"")
+        self.ENGINE_MAP = self._get_engine_map(engine_map_file_name)
 
         # Steering parameters
         self.STEERING_RATIO = config.getfloat(
@@ -60,7 +63,7 @@ class VehicleDynamicModel3dof():
         self.TRANSMISSION_GEARS_NUMBER = config.getint(
             "transmission", "gears", fallback=6)
         self.TRANSMISSION_GEAR_RATIOS = list(map(float, config.get(
-            "transmission", "gearRatios", fallback="4.71 3.14 2.11 1.67 1.29 1.00").split()))
+            "transmission", "gearRatios", fallback="-4.71 4.71 3.14 2.11 1.67 1.29 1.00").split()))
         self.TRANSMISSION_FINAL_DRIVE_RATIO = config.getfloat(
             "transmission", "finalDriveRatio", fallback=3)
         self.TRANSMISSION_DRIVELINE_EFFICIENCY = config.getfloat(
@@ -228,6 +231,16 @@ class VehicleDynamicModel3dof():
     def slope_force(self):
         return self._slope_force
 
+    def _get_engine_map(self, file_path):
+        
+        engine_map = np.genfromtxt(file_path, dtype="float", delimiter=",")
+        throttle_pct = engine_map[0,1:]
+        engine_speed = engine_map[1:,0]
+        torque = engine_map[1:,1:]
+
+        return interpolate.interp2d(throttle_pct, engine_speed, torque)
+
+
     def set_position(self, x=0, y=0, theta=0, wheel_angle=0) -> None:
         """
         Set postion of vehicle
@@ -304,8 +317,12 @@ class VehicleDynamicModel3dof():
         @throttle: Accelerator throttle [0-1]
         @return: Engine torque [Nm]
         """
+
+        engine_torque = self.ENGINE_MAP(throttle * 100, engine_speed)[0]
+        return engine_torque
+
         engine_torque = np.interp(
-            engine_speed, self.ENGINE_SPEED_CURVE, self.ENGINE_TORQUE_CURVE) * min(throttle + 0.1, 1)
+            engine_speed, self.ENGINE_SPEED_CURVE, self.ENGINE_TORQUE_CURVE) * min(throttle + 0.01, 1)
         return engine_torque
 
     def _transmission_model(self, engine_torque: float, wheel_speed: float, drive_mode: str) -> tuple[float, float]:
@@ -321,11 +338,14 @@ class VehicleDynamicModel3dof():
 
         if drive_mode.upper() in ["P", "N"]:
             return 0, self._engine_speed
+        elif drive_mode.upper() == "D":
+            self._selected_gear = self._shifter_model(self._engine_speed)
+        else:
+            # R gear
+            self._selected_gear = 0
 
-        self._selected_gear = self._shifter_model(self._engine_speed)
-        GEAR_INDEX_OFFSET = 1
-        gear_ratio = self.TRANSMISSION_GEAR_RATIOS[self._selected_gear -
-                                                   GEAR_INDEX_OFFSET]
+        gear_ratio = self.TRANSMISSION_GEAR_RATIOS[self._selected_gear]
+                                                   
 
         transmission_torque = engine_torque * \
             self.TRANSMISSION_DRIVELINE_EFFICIENCY * \
@@ -381,11 +401,16 @@ class VehicleDynamicModel3dof():
                 self._slope_force + passive_force
         else:
             self._longitudinal_force = self._traction_force + \
-                self._slope_force + math.copysign(self._braking_force, -self._vehicle_speed)
+                self._slope_force + math.copysign(self._braking_force * 0 + self._rolling_force, -self._vehicle_speed)
 
         self._vehicle_acceleration = self._longitudinal_force / self.VEHICLE_MASS
         self._vehicle_speed = self._vehicle_speed + \
             self._vehicle_acceleration * self.simulation_step
+
+        if self._drive_mode == "D":
+            self._vehicle_speed = max(0, self._vehicle_speed)
+        elif self._drive_mode == "R":
+            self._vehicle_speed = min(0, self._vehicle_speed)
 
         wheel_speed = self._vehicle_speed / self.TIRE_DYNAMICR_RADIUS
         return wheel_speed
@@ -398,8 +423,9 @@ class VehicleDynamicModel3dof():
         self.simulation_step = dt
         self._engine_torque = self._engine_model(
             self._engine_speed, self._throttle)
-        self._transmission_torque, self._engine_speed = self._transmission_model(
+        self._transmission_torque, engine_speed = self._transmission_model(
             self._engine_torque, self._wheel_speed, self._drive_mode)
+        self._engine_speed = np.clip(engine_speed, self.ENGINE_SPEED_MIN, self.ENGINE_SPEED_MAX)
         self._wheel_speed = self._vehicle_model(self._transmission_torque)
 
     def plot_vehicle_telemetry(self, parameters: str) -> None:
@@ -497,6 +523,8 @@ class VehicleDynamicModel3dof():
 def main():
 
     vehicle = VehicleDynamicModel3dof("vehicle/mazda.ini")
+    vehicle.ignition_on = True
+    vehicle.drive_mode = "D"
     interval = np.linspace(0, 100, 1001)
 
     vehicle_speed = list()

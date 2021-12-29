@@ -54,7 +54,7 @@ def test_accelerating():
     vehicle.update(10)
 
     assert vehicle.vehicle_speed_kmph > 100
-    assert vehicle.vehicle_speed_kmph < 150
+    assert vehicle.vehicle_speed_kmph < 180
 
 
 def test_neutral_gear():
@@ -75,11 +75,11 @@ def test_braking():
     vehicle.update(10)
 
     assert vehicle.vehicle_speed_kmph > 100
-    assert vehicle.vehicle_speed_kmph < 150
+    assert vehicle.vehicle_speed_kmph < 180
 
     vehicle.brake_pedal = 90
     vehicle.throttle_pedal = 0
-    vehicle.update(2)
+    vehicle.update(4)
     assert vehicle.vehicle_speed_kmph > 10
     assert vehicle.vehicle_speed_kmph < 60
 
@@ -91,12 +91,68 @@ def test_braking_to_full_stop():
     vehicle.drive_mode = "D"
 
     vehicle.throttle_pedal = 0
-    vehicle.update(2)
-    assert vehicle.vehicle_speed_kmph > 5, "Speed should be above 5"
-    assert vehicle.vehicle_speed_kmph < 10
+    #vehicle.update(2)
+    #assert vehicle.vehicle_speed_kmph > 5, "Speed should be above 5"
+    #assert vehicle.vehicle_speed_kmph < 15
 
     vehicle.brake_pedal = 90
     vehicle.throttle_pedal = 0
-    vehicle.update(2)
+
+    speeds = list()
+    slope = list()
+    drag = list()
+    braking = list()
+    long = list()
+    trac = list()
+    roll = list()
+
+    i = 1
+    while i < 1000: # vehicle.vehicle_speed_kmph > 0.1:
+
+
+        if i > 0:
+            vehicle.drive_mode = "D"
+            vehicle.throttle_pedal = 20
+            vehicle.brake_pedal = 0
+        if i > 300:
+            vehicle.drive_mode = "D"
+            vehicle.throttle_pedal = 0
+            vehicle.brake_pedal = 80
+        if i > 500:
+            vehicle.drive_mode = "D"
+            vehicle.throttle_pedal = 0
+            vehicle.brake_pedal = 0
+        if i > 700:
+            vehicle.drive_mode = "R"
+            vehicle.throttle_pedal = 0
+            vehicle.brake_pedal = 80
+        if i > 800:
+            vehicle.drive_mode = "R"
+            vehicle.throttle_pedal = 20
+            vehicle.brake_pedal = 0
+
+
+        vehicle.update(0.01)
+        i += 1
+        speeds.append(vehicle.vehicle_speed_kmph)
+        slope.append(vehicle._slope_force)
+        drag.append(vehicle._drag_force)
+        braking.append(vehicle._braking_force)
+        long.append(vehicle._longitudinal_force)
+        trac.append(vehicle._traction_force)
+        roll.append(vehicle._rolling_force)
+
+    plt.subplot(2,1,1)
+    plt.plot(speeds)
+    plt.subplot(2,1,2)
+    plt.plot(slope)
+    plt.plot(drag)
+    plt.plot(braking)
+    plt.plot(long)
+    plt.plot(trac)
+    plt.plot(roll)
+    plt.legend(["slope", "drag", "braking", "long", "traction", "rolling"])
+    plt.show()
+    return
     assert vehicle.vehicle_speed_kmph > 0
     assert vehicle.vehicle_speed_kmph < 10
