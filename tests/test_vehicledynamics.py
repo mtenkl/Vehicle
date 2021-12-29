@@ -63,7 +63,8 @@ def test_neutral_gear():
     vehicle.drive_mode = "N"
 
     vehicle.throttle_pedal = 40
-    vehicle.update(10)
+    for i in range(1000):
+        vehicle.update(0.01)
 
     assert vehicle.vehicle_speed_kmph == 0
 
